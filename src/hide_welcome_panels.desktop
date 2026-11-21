@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Service
+ServiceTypes=Krita/PythonPlugin
+X-KDE-Library=hide_welcome_panels
+X-Python-2-Compatible=false
+X-Krita-Manual=Manual.html
+Name=Hide Welcome Panels
+Comment=Hide the Start and News columns of the welcome page without flicker

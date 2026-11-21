@@ -1,0 +1,65 @@
+name: Release
+
+# 推送 v* 标签（如 v1.0.0）时打包插件并创建 GitHub Release。
+# Push a v* tag (e.g. v1.0.0) to package the plugin and publish a GitHub Release.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v1.0.0). Created on the current commit if it does not exist."
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.tag }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Check Python syntax
+        run: python3 -m py_compile src/hide_welcome_panels/*.py
+
+      - name: Build plugin zip
+        run: |
+          mkdir -p dist
+          ZIP="hide_welcome_panels-${{ steps.tag.outputs.version }}.zip"
+          # .desktop 和插件文件夹必须在 zip 根目录，Krita 的导入器才能识别
+          # The .desktop file and plugin folder must sit at the zip root for Krita's importer
+          (cd src && zip -r "../dist/${ZIP}" hide_welcome_panels.desktop hide_welcome_panels \
+            -x "*/__pycache__/*" "*.pyc")
+          unzip -l "dist/${ZIP}"
+          echo "ZIP=dist/${ZIP}" >> "$GITHUB_ENV"
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          NOTES="Install: Krita → Tools → Scripts → Import Python Plugin from File… → select the zip, then enable **Hide Welcome Panels** in Settings → Configure Krita → Python Plugin Manager and restart Krita.
+
+          安装：Krita → 工具 → 脚本 → 从文件导入 Python 插件 → 选择 zip，然后在 设置 → 配置 Krita → Python 插件管理器 中勾选 **Hide Welcome Panels** 并重启 Krita。"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$ZIP" --clobber
+          else
+            gh release create "$TAG" "$ZIP" \
+              --title "Hide Welcome Panels $TAG" \
+              --notes "$NOTES" \
+              --target "${GITHUB_SHA}"
+          fi
